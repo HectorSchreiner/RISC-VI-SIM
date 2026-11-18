@@ -71,6 +71,7 @@ struct InstructionHandler {
     int funct3;
     int imm;
     int halted;
+    int pc_changed;
     instruction_err_t (*decode_instruction)(struct InstructionHandler *self, int bits, struct ProgramCounter* pc); // also something that resembles the instruction in bits
     instruction_err_t (*execute_instruction)(struct InstructionHandler *self, instruction_t instruction);
 };

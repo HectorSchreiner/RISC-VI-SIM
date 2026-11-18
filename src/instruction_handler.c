@@ -11,6 +11,7 @@ struct InstructionHandler *create_instruction_handler()
         return NULL;
     memset(ih->registers, 0, sizeof ih->registers);
     ih->halted = 0;
+    ih->pc_changed = 0;
     ih->decode_instruction = decode_instruction;
     ih->execute_instruction = execute_instruction;
     return ih;
@@ -18,15 +19,15 @@ struct InstructionHandler *create_instruction_handler()
 
 void execute_format_i1(struct InstructionHandler *ih);
 void execute_format_i2(struct InstructionHandler *ih);
-void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter* pc);
+void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter *pc);
 void execute_format_i4(struct InstructionHandler *ih);
 void execute_format_r(struct InstructionHandler *ih);
 
+void execute_format_b(struct InstructionHandler *ih, struct ProgramCounter *pc);
 void execute_format_u1(struct InstructionHandler *ih);
 void execute_format_u2(struct InstructionHandler *ih);
 
-
-instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, struct ProgramCounter* pc)
+instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, struct ProgramCounter *pc)
 {
 
     switch (bits & 0b1111111)
@@ -87,7 +88,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         // ih->rd     = bits>>7  & 0b11111;
         ih->funct3 = bits >> 12 & 0b111;
         ih->imm = (((bits >> 31) & 0b1) << 12) | (((bits >> 7) & 0b1) << 11) | (((bits >> 8) & 0b1111) << 1) | (((bits >> 25) & 0b111111) << 5);
-        printf("function type B\n");
+        execute_format_b(ih, pc);
         break;
 
     case 0b1101111: // function type J
@@ -301,7 +302,6 @@ void execute_format_i1(struct InstructionHandler *ih)
             printf("SRAI x%d(%d) + %d -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         }
         break;
-
     }
 
     case 0x2:
@@ -375,7 +375,7 @@ void execute_format_i2(struct InstructionHandler *ih)
         ih->registers[ih->rd] = (ih->memory[src_1 + src_2] & 0xFF);
 
         printf("LBU M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
-     
+
         break;
     }
 
@@ -397,7 +397,7 @@ void execute_format_i2(struct InstructionHandler *ih)
     }
 }
 
-void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter* pc)
+void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter *pc)
 {
     int src = pc->cnt;
     int src1 = ih->rs1;
@@ -405,35 +405,87 @@ void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter* pc)
     ih->registers[ih->rd] = src + 4;
 
     pc->cnt = src1 + src2;
+    ih->pc_changed = 1;
     printf("JALR\n");
 }
 
 void execute_format_i4(struct InstructionHandler *ih)
 {
     printf("E");
-    if ((ih->imm & 0b1111) == 0x0) {
+    if ((ih->imm & 0b1111) == 0x0)
+    {
         printf("CALL\n");
-        if (ih->registers[17] == 10) {   
+        if (ih->registers[17] == 10)
+        {
             ih->halted = 1;
         }
         sleep(0);
-    } else if ((ih->imm & 0b1111) == 0x1) {
+    }
+    else if ((ih->imm & 0b1111) == 0x1)
+    {
         printf("BREAK\n");
     }
-
 }
 
-void execute_format_u1(struct InstructionHandler *ih) {
+void execute_format_b(struct InstructionHandler *ih, struct ProgramCounter *pc)
+{
+    if (ih->imm & 0b1000000000000)
+    {
+        ih->imm |= ~0b1111111111111;
+    }
+
+    int a = ih->registers[ih->rs1];
+    int b = ih->registers[ih->rs2];
+    int taken = 0;
+
+    switch (ih->funct3)
+    {
+    case 0x0:
+        taken = a == b;
+        printf("BEQ\n");
+        break;
+    case 0x1:
+        taken = a != b;
+        printf("BNE\n");
+        break;
+    case 0x4:
+        taken = a < b;
+        printf("BLT\n");
+        break;
+    case 0x5:
+        taken = a >= b;
+        printf("BGE\n");
+        break;
+    case 0x6:
+        taken = (unsigned)a < (unsigned)b;
+        printf("BLTU\n");
+        break;
+    case 0x7:
+        taken = (unsigned)a >= (unsigned)b;
+        printf("BGEU\n");
+        break;
+    default:
+        printf("Unknown branch funct3: %d\n", ih->funct3);
+        break;
+    }
+
+    if (taken)
+    {
+        pc->cnt += ih->imm;
+        ih->pc_changed = 1;
+    }
+}
+
+void execute_format_u1(struct InstructionHandler *ih)
+{
     int src = (ih->imm) << 12;
     ih->registers[ih->rd] = src;
     printf("imm(%d) << 12 -> x%d(%d)\n", ih->imm, ih->rd, ih->registers[ih->rd]);
 }
 
-
-void execute_format_u2(struct InstructionHandler *ih) {
-
+void execute_format_u2(struct InstructionHandler *ih)
+{
 }
-
 
 instruction_err_t execute_instruction(struct InstructionHandler *ih, instruction_t instruction)
 {
