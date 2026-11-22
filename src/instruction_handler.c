@@ -24,8 +24,9 @@ void execute_format_i4(struct InstructionHandler *ih);
 void execute_format_r(struct InstructionHandler *ih);
 
 void execute_format_b(struct InstructionHandler *ih, struct ProgramCounter *pc);
+void execute_format_j(struct InstructionHandler *ih, struct ProgramCounter *pc);
 void execute_format_u1(struct InstructionHandler *ih);
-void execute_format_u2(struct InstructionHandler *ih);
+void execute_format_u2(struct InstructionHandler *ih, struct ProgramCounter *pc);
 
 instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, struct ProgramCounter *pc)
 {
@@ -45,7 +46,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         ih->rs1 = (bits >> 15) & 0b11111;
         ih->rd = (bits >> 7) & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
-        ih->imm = (bits >> 20) & 0b111111111111;
+        ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i1(ih);
         break;
 
@@ -53,7 +54,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         ih->rs1 = (bits >> 15) & 0b11111;
         ih->rd = (bits >> 7) & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
-        ih->imm = (bits >> 20) & 0b111111111111;
+        ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i2(ih);
         break;
 
@@ -61,7 +62,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         ih->rs1 = (bits >> 15) & 0b11111;
         ih->rd = (bits >> 7) & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
-        ih->imm = (bits >> 20) & 0b111111111111;
+        ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i3(ih, pc);
         break;
 
@@ -69,7 +70,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         ih->rs1 = (bits >> 15) & 0b11111;
         ih->rd = (bits >> 7) & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
-        ih->imm = (bits >> 20) & 0b111111111111;
+        ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i4(ih);
         break;
 
@@ -78,7 +79,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         ih->rs2 = (bits >> 20) & 0b11111;
         // ih->rd     = bits>>7  & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
-        ih->imm = (((bits >> 25) & 0b1111111) << 5) | ((bits >> 7) & 0b11111);
+        ih->imm = ((bits >> 25) << 5) | ((bits >> 7) & 0b11111); // arithmetic shift sign-extends
         printf("function type S\n");
         break;
 
@@ -96,19 +97,19 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         // ih->rs2    = bits>>20 & 0b11111;
         ih->rd = (bits >> 7) & 0b11111;
         // ih->funct3 = bits>>12 & 0b111;
-        ih->imm = (((bits >> 31) & 0b1) << 20) | (((bits >> 21) & 0b1111111111) << 9) | (((bits >> 20) & 0b1) << 8) | ((bits >> 12) & 0b11111111);
-        printf("function type J\n");
+        ih->imm = (((bits >> 31) & 0b1) << 20) | (((bits >> 21) & 0b1111111111) << 1) | (((bits >> 20) & 0b1) << 11) | (((bits >> 12) & 0b11111111) << 12);
+        execute_format_j(ih, pc);
         break;
 
     case 0b0110111: // function type U (Load Upper Imm)
         ih->rd = (bits >> 7) & 0b11111;
-        ih->imm = (bits & (0b11111111111111111111)) << 12;
+        ih->imm = bits & 0xFFFFF000;
         execute_format_u1(ih);
         break;
     case 0b0010111: // function type U (Add Upper Imm To PC)
         ih->rd = (bits >> 7) & 0b11111;
-        ih->imm = (bits & (0b11111111111111111111)) << 12;
-        execute_format_u2(ih);
+        ih->imm = bits & 0xFFFFF000;
+        execute_format_u2(ih, pc);
         break;
 
     default:
@@ -399,14 +400,12 @@ void execute_format_i2(struct InstructionHandler *ih)
 
 void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter *pc)
 {
-    int src = pc->cnt;
-    int src1 = ih->rs1;
-    int src2 = ih->imm;
-    ih->registers[ih->rd] = src + 4;
+    int target = (ih->registers[ih->rs1] + ih->imm) & ~1; // read rs1 before writing rd
+    ih->registers[ih->rd] = pc->cnt + 4;
 
-    pc->cnt = src1 + src2;
+    pc->cnt = target;
     ih->pc_changed = 1;
-    printf("JALR\n");
+    printf("JALR x%d, %d(x%d) -> PC(%d)\n", ih->rd, ih->imm, ih->rs1, pc->cnt);
 }
 
 void execute_format_i4(struct InstructionHandler *ih)
@@ -476,15 +475,31 @@ void execute_format_b(struct InstructionHandler *ih, struct ProgramCounter *pc)
     }
 }
 
-void execute_format_u1(struct InstructionHandler *ih)
+void execute_format_j(struct InstructionHandler *ih, struct ProgramCounter *pc)
 {
-    int src = (ih->imm) << 12;
-    ih->registers[ih->rd] = src;
-    printf("imm(%d) << 12 -> x%d(%d)\n", ih->imm, ih->rd, ih->registers[ih->rd]);
+    if (ih->imm & 0x100000)
+    {
+        ih->imm |= ~0x1FFFFF;
+    }
+
+    ih->registers[ih->rd] = pc->cnt + 4;
+    pc->cnt += ih->imm;
+    ih->pc_changed = 1;
+    printf("JAL x%d, %d -> PC(%d)\n", ih->rd, ih->imm, pc->cnt);
 }
 
-void execute_format_u2(struct InstructionHandler *ih)
+void execute_format_u1(struct InstructionHandler *ih)
 {
+    // LUI
+    ih->registers[ih->rd] = ih->imm;
+    printf("LUI %d -> x%d(%d)\n", ih->imm, ih->rd, ih->registers[ih->rd]);
+}
+
+void execute_format_u2(struct InstructionHandler *ih, struct ProgramCounter *pc)
+{
+    // AUIPC
+    ih->registers[ih->rd] = pc->cnt + ih->imm;
+    printf("AUIPC PC(%d) + %d -> x%d(%d)\n", pc->cnt, ih->imm, ih->rd, ih->registers[ih->rd]);
 }
 
 instruction_err_t execute_instruction(struct InstructionHandler *ih, instruction_t instruction)
