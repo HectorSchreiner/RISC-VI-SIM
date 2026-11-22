@@ -35,5 +35,22 @@ int main(void) {
       pc->increment_counter(pc);
   }
 
+  for(int i = 0; i < 32; i++){
+  printf("%d: %d\n",i, ih->registers[i]);
+  }
+
+    FILE *fptr = fopen("gfg.bin", "wb");
+
+    int n = sizeof(ih->registers) / sizeof(ih->registers[0]);
+    
+    // Write array a[] into the file using fwrite
+    fwrite(ih->registers, sizeof(int), n, fptr);
+
+    fclose(fptr);
+    return 0;
+
+
+
+
   return 0;
 }
