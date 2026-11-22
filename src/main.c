@@ -4,14 +4,19 @@
 #include <stdio.h>
 #include <string.h>
 
-int main(void) {
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
+    printf("Usage: %s <input file> <output file>\n", argv[0]);
+    return 1;
+  }
+
   int instruction_cnt = 0;
 
   struct FileHandler *fh = create_filehandler();
   struct ProgramCounter *pc = create_counter();
   struct InstructionHandler *ih = create_instruction_handler();
 
-  int *instructions_b = fh->read_file(fh, &instruction_cnt);
+  int *instructions_b = fh->read_file(fh, argv[1],&instruction_cnt);
   if (!instructions_b || !ih)
     return 1;
 
@@ -38,19 +43,8 @@ int main(void) {
   for(int i = 0; i < 32; i++){
   printf("%d: %d\n",i, ih->registers[i]);
   }
-
-    FILE *fptr = fopen("gfg.bin", "wb");
-
-    int n = sizeof(ih->registers) / sizeof(ih->registers[0]);
-    
-    // Write array a[] into the file using fwrite
-    fwrite(ih->registers, sizeof(int), n, fptr);
-
-    fclose(fptr);
-    return 0;
-
-
-
+  int n = sizeof(ih->registers) / sizeof(ih->registers[0]);
+  fh->write_file(argv[2], ih->registers, n);
 
   return 0;
 }

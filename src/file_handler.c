@@ -7,11 +7,12 @@
 struct FileHandler *create_filehandler() {
   struct FileHandler *fh = malloc((sizeof(struct FileHandler)));
   fh->read_file = read_file;
+  fh->write_file =write_file;
   return fh;
 }
 
-int *read_file(struct FileHandler *fh, int *size) {
-  char filename[] = "tests/addlarge.bin";
+int *read_file(struct FileHandler *fh,char *filename, int *size) {
+  //char filename[] = "tests/addlarge.bin";
 
   FILE *fptr = fopen(filename, "rb");
   if (fptr == NULL) {
@@ -36,4 +37,13 @@ int *read_file(struct FileHandler *fh, int *size) {
   fclose(fptr);
 
   return instructions;
+}
+int write_file(char name[], int arr[], int n){
+
+    FILE *fptr = fopen(name, "wb");
+
+    fwrite(arr, sizeof(int), n, fptr);
+
+    fclose(fptr);
+    return 0;
 }

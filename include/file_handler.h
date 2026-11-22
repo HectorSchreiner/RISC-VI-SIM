@@ -13,11 +13,12 @@ typedef enum FileErr
 /// this way we can simulate methods.
 struct FileHandler
 {
-    int* (*read_file)(struct FileHandler *self, int *size);
+    int* (*read_file)(struct FileHandler *self, char *filename, int *size);
+    int (*write_file)(char name[], int arr[], int n);
 };
 
 struct FileHandler* create_filehandler();
 
-int* read_file(struct FileHandler* fh, int *size);
-
+int* read_file(struct FileHandler* fh, char *filename, int *size);
+int write_file(char name[], int arr[], int n);
 #endif
