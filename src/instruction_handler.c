@@ -10,15 +10,54 @@ struct InstructionHandler *create_instruction_handler()
     if (!ih)
         return NULL;
     memset(ih->registers, 0, sizeof ih->registers);
+    ih->memory = calloc(MEMORY_SIZE, 1);
+    if (!ih->memory)
+    {
+        free(ih);
+        return NULL;
+    }
     ih->halted = 0;
     ih->pc_changed = 0;
     ih->decode_instruction = decode_instruction;
     ih->execute_instruction = execute_instruction;
+    ih->load_memory = load_memory;
+    ih->store_memory = store_memory;
     return ih;
+}
+
+int load_memory(struct InstructionHandler *ih, unsigned addr, int bytes)
+{
+    if (addr > MEMORY_SIZE - bytes)
+    {
+        printf("Memory Read Out Of Bounds: %u\n", addr);
+        return 0;
+    }
+
+    unsigned value = 0;
+    for (int i = 0; i < bytes; i++)
+    {
+        value |= (unsigned)ih->memory[addr + i] << (8 * i);
+    }
+    return value;
+}
+
+void store_memory(struct InstructionHandler *ih, unsigned addr, int bytes, int value)
+{
+    if (addr > MEMORY_SIZE - bytes)
+    {
+        printf("Memory Write Out Of Bounds: %u\n", addr);
+        return;
+    }
+
+    for (int i = 0; i < bytes; i++)
+    {
+        ih->memory[addr + i] = ((unsigned)value >> (8 * i)) & 0xFF;
+    }
 }
 
 void execute_format_i1(struct InstructionHandler *ih);
 void execute_format_i2(struct InstructionHandler *ih);
+void execute_format_s(struct InstructionHandler *ih);
 void execute_format_i3(struct InstructionHandler *ih, struct ProgramCounter *pc);
 void execute_format_i4(struct InstructionHandler *ih);
 void execute_format_r(struct InstructionHandler *ih);
@@ -80,7 +119,7 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
         // ih->rd     = bits>>7  & 0b11111;
         ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = ((bits >> 25) << 5) | ((bits >> 7) & 0b11111); // arithmetic shift sign-extends
-        printf("function type S\n");
+        execute_format_s(ih);
         break;
 
     case 0b1100011: // function type B
@@ -332,50 +371,40 @@ void execute_format_i1(struct InstructionHandler *ih)
 
 void execute_format_i2(struct InstructionHandler *ih)
 {
+    unsigned addr = ih->registers[ih->rs1] + ih->imm;
+
     switch (ih->funct3)
     {
     case 0:
     { // LB
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
+        ih->registers[ih->rd] = (signed char)ih->load_memory(ih, addr, 1);
 
-        ih->registers[ih->rd] = (ih->memory[src_1 + src_2] & 0xFF);
-
-        printf("LB M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
+        printf("LB M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
     }
 
     case 0x1:
     { // LH
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
+        ih->registers[ih->rd] = (short)ih->load_memory(ih, addr, 2);
 
-        ih->registers[ih->rd] = (ih->memory[src_1 + src_2] & 0xFFFF);
-
-        printf("LH M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
+        printf("LH M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
     }
 
     case 0x2:
     { // LW
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
+        ih->registers[ih->rd] = ih->load_memory(ih, addr, 4);
 
-        ih->registers[ih->rd] = ih->memory[src_1 + src_2];
-
-        printf("LW M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
+        printf("LW M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
     }
 
     case 0x4:
     {
         // LBU
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
+        ih->registers[ih->rd] = ih->load_memory(ih, addr, 1);
 
-        ih->registers[ih->rd] = (ih->memory[src_1 + src_2] & 0xFF);
-
-        printf("LBU M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
+        printf("LBU M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
 
         break;
     }
@@ -383,12 +412,46 @@ void execute_format_i2(struct InstructionHandler *ih)
     case 0x5:
     {
         // LHU
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
+        ih->registers[ih->rd] = ih->load_memory(ih, addr, 2);
 
-        ih->registers[ih->rd] = (ih->memory[src_1 + src_2] & 0x0FFFF);
+        printf("LHU M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
+        break;
+    }
 
-        printf("LHU M[%d] -> x%d(%d)\n", (src_1 + src_2), ih->rd, ih->registers[ih->rd]);
+    default:
+        printf("UNKOWN FUNC: %d\n", ih->funct3);
+        break;
+    }
+}
+
+void execute_format_s(struct InstructionHandler *ih)
+{
+    unsigned addr = ih->registers[ih->rs1] + ih->imm;
+    int value = ih->registers[ih->rs2];
+
+    switch (ih->funct3)
+    {
+    case 0x0:
+    { // SB
+        ih->store_memory(ih, addr, 1, value);
+
+        printf("SB x%d(%d) -> M[%u]\n", ih->rs2, value & 0xFF, addr);
+        break;
+    }
+
+    case 0x1:
+    { // SH
+        ih->store_memory(ih, addr, 2, value);
+
+        printf("SH x%d(%d) -> M[%u]\n", ih->rs2, value & 0xFFFF, addr);
+        break;
+    }
+
+    case 0x2:
+    { // SW
+        ih->store_memory(ih, addr, 4, value);
+
+        printf("SW x%d(%d) -> M[%u]\n", ih->rs2, value, addr);
         break;
     }
 

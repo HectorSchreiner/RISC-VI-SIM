@@ -1,40 +1,39 @@
 #include "file_handler.h"
-#include <stdio.h>
-#include <sys/stat.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
-struct FileHandler* create_filehandler() {
-   struct FileHandler* fh = malloc((sizeof(struct FileHandler)));
-   fh->read_file = read_file;
-   return fh;
+struct FileHandler *create_filehandler() {
+  struct FileHandler *fh = malloc((sizeof(struct FileHandler)));
+  fh->read_file = read_file;
+  return fh;
 }
 
-int* read_file(struct FileHandler *fh, int *size)
-{
-   char filename[] = "tests/addlarge.bin";
+int *read_file(struct FileHandler *fh, int *size) {
+  char filename[] = "tests/addlarge.bin";
 
-   FILE *fptr = fopen(filename, "rb");
-   if (fptr == NULL) {
-      printf("Error! opening file\n");
-      return NULL;
-   }
+  FILE *fptr = fopen(filename, "rb");
+  if (fptr == NULL) {
+    printf("Error! opening file\n");
+    return NULL;
+  }
 
-   struct stat st;
-   if (stat(filename, &st) != 0) {
-      fclose(fptr);
-      return NULL;
-   }
-   *size = st.st_size;                       // size in BYTES
+  struct stat st;
+  if (stat(filename, &st) != 0) {
+    fclose(fptr);
+    return NULL;
+  }
+  *size = st.st_size; // size in BYTES
 
-   int *instructions = malloc(st.st_size);
-   if (!instructions) {
-      fclose(fptr);
-      return NULL;
-   }
+  int *instructions = malloc(st.st_size);
+  if (!instructions) {
+    fclose(fptr);
+    return NULL;
+  }
 
-   fread(instructions, sizeof(int), st.st_size / sizeof(int), fptr);
-   fclose(fptr);
+  fread(instructions, sizeof(int), st.st_size / sizeof(int), fptr);
+  fclose(fptr);
 
-   return instructions;
+  return instructions;
 }
