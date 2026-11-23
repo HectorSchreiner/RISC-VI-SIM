@@ -1,6 +1,7 @@
 #include "instructions.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -180,14 +181,14 @@ void execute_format_r(struct InstructionHandler *ih)
         // SRL
         if (ih->funct7 == 0)
         {
-            ih->registers[ih->rd] = src_1 >> src_2;
+            ih->registers[ih->rd] = (uint32_t)src_1 >> src_2;
             printf("SRL x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
         // SRA
         if (ih->funct7 == 0x20)
         {
             // TODO (NOT WORKING!!!)
-            ih->registers[ih->rd] = src_1 >> src_2;
+            ih->registers[ih->rd] = (int32_t)src_1 >> src_2;
             printf("SRA x%d(%d), x%d(%d) -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
         break;
@@ -200,7 +201,7 @@ void execute_format_r(struct InstructionHandler *ih)
 
     case 0x3:
         // SLTU TODO NOT WORKING!!
-        ih->registers[ih->rd] = (src_1 < src_2 ? 1 : 0);
+        ih->registers[ih->rd] = ((uint32_t)src_1 < (uint32_t)src_2 ? 1 : 0);
         printf("SLTU x%d(%d), x%d(%d) -> x%d(%d) -- NOT IMPLEMENTED CORRECTLY\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
 
@@ -251,15 +252,15 @@ void execute_format_i1(struct InstructionHandler *ih)
         if (((ih->imm >> 5) & 0b11111111) == 0x00)
         {
             // SLLI
-            ih->registers[ih->rd] = src >> (ih->imm & 0b11111);
+            ih->registers[ih->rd] = (uint32_t)src >> (ih->imm & 0b11111);
             printf("SRLI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
             break;
         }
         // SRAI
         if (((ih->imm >> 5) & 0b11111111) == 0x20)
         {
-            // TODO (NOT WORKING!!!)
-            ih->registers[ih->rd] = src >> (ih->imm & 0b11111);
+            ih->registers[ih->rd] = (int32_t)src >> (ih->imm & 0b11111);
+
             printf("SRAI x%d(%d) + %d -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         }
         break;
@@ -272,7 +273,7 @@ void execute_format_i1(struct InstructionHandler *ih)
 
     case 0x3:
         // SLTIU TODO NOT WORKING!!
-        ih->registers[ih->rd] = (src < src_2 ? 1 : 0);
+        ih->registers[ih->rd] = ((uint32_t)src < (uint32_t)src_2 ? 1 : 0);
         printf("SLTU x%d(%d), x%d(%d) -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
 
