@@ -15,7 +15,7 @@ for in in $(find tests -name "*.bin" | sort); do
     echo "PASS: $in"
     pass=$((pass + 1))
   else
-    echo "FAIL: $in"
+    echo "FAIL: $in ---------------"
     fail=$((fail + 1))
   fi
 

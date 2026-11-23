@@ -19,7 +19,6 @@ struct InstructionHandler *create_instruction_handler()
     ih->halted = 0;
     ih->pc_changed = 0;
     ih->decode_instruction = decode_instruction;
-    ih->execute_instruction = execute_instruction;
     ih->load_memory = load_memory;
     ih->store_memory = store_memory;
     return ih;
@@ -69,84 +68,58 @@ void execute_format_u2(struct InstructionHandler *ih, struct ProgramCounter *pc)
 
 instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, struct ProgramCounter *pc)
 {
+    ih->rs1 = (bits >> 15) & 0b11111;
+    ih->rs2 = (bits >> 20) & 0b11111;
+    ih->rd = (bits >> 7) & 0b11111;
+    ih->funct3 = (bits >> 12) & 0b111;
+    ih->funct7 = (bits >> 25) & 0b1111111;
 
     switch (bits & 0b1111111)
     {
     case 0b0110011: // function type R
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rs2 = (bits >> 20) & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
-        ih->funct7 = (bits >> 25) & 0b1111111;
         execute_format_r(ih);
         break;
 
     case 0b0010011: // function type I-1 (Immediate Operations)
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i1(ih);
         break;
 
     case 0b0000011: // function type I-2 (Load Store)
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i2(ih);
         break;
 
     case 0b1100111: // function type I-3 (Jump and Link reg)
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i3(ih, pc);
         break;
 
     case 0b1110011: // function type I-4 (Enviroment Calls)
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = bits >> 20; // arithmetic shift sign-extends
         execute_format_i4(ih);
         break;
 
     case 0b0100011: // function type S
-        ih->rs1 = (bits >> 15) & 0b11111;
-        ih->rs2 = (bits >> 20) & 0b11111;
-        // ih->rd     = bits>>7  & 0b11111;
-        ih->funct3 = (bits >> 12) & 0b111;
         ih->imm = ((bits >> 25) << 5) | ((bits >> 7) & 0b11111); // arithmetic shift sign-extends
         execute_format_s(ih);
         break;
 
     case 0b1100011: // function type B
-        ih->rs1 = bits >> 15 & 0b11111;
-        ih->rs2 = bits >> 20 & 0b11111;
-        // ih->rd     = bits>>7  & 0b11111;
-        ih->funct3 = bits >> 12 & 0b111;
         ih->imm = (((bits >> 31) & 0b1) << 12) | (((bits >> 7) & 0b1) << 11) | (((bits >> 8) & 0b1111) << 1) | (((bits >> 25) & 0b111111) << 5);
         execute_format_b(ih, pc);
         break;
 
     case 0b1101111: // function type J
-        // ih->rs1    = bits>>15 & 0b11111;
-        // ih->rs2    = bits>>20 & 0b11111;
-        ih->rd = (bits >> 7) & 0b11111;
-        // ih->funct3 = bits>>12 & 0b111;
         ih->imm = (((bits >> 31) & 0b1) << 20) | (((bits >> 21) & 0b1111111111) << 1) | (((bits >> 20) & 0b1) << 11) | (((bits >> 12) & 0b11111111) << 12);
         execute_format_j(ih, pc);
         break;
 
     case 0b0110111: // function type U (Load Upper Imm)
-        ih->rd = (bits >> 7) & 0b11111;
         ih->imm = bits & 0xFFFFF000;
         execute_format_u1(ih);
         break;
     case 0b0010111: // function type U (Add Upper Imm To PC)
-        ih->rd = (bits >> 7) & 0b11111;
         ih->imm = bits & 0xFFFFF000;
         execute_format_u2(ih, pc);
         break;
@@ -162,78 +135,51 @@ instruction_err_t decode_instruction(struct InstructionHandler *ih, int bits, st
 
 void execute_format_r(struct InstructionHandler *ih)
 {
+    int src_1 = ih->registers[ih->rs1];
+    int src_2 = ih->registers[ih->rs2];
+
     switch (ih->funct3)
     {
     case 0:
         if (ih->funct7 == 0)
         { // ADD
-            int src_1 = ih->registers[ih->rs1];
-            int src_2 = ih->registers[ih->rs2];
-
             ih->registers[ih->rd] = src_1 + src_2;
             printf("ADD x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
         if (ih->funct7 == 0x20)
         { // SUB
-            int src_1 = ih->registers[ih->rs1];
-            int src_2 = ih->registers[ih->rs2];
-
             ih->registers[ih->rd] = src_1 - src_2;
             printf("SUB x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
         break;
     case 0x4:
-    {
         // XOR
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
-
         ih->registers[ih->rd] = src_1 ^ src_2;
         printf("XOR x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x6:
-    {
         // OR
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
-
         ih->registers[ih->rd] = src_1 | src_2;
         printf("OR x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x7:
-    {
         // OR
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
-
         ih->registers[ih->rd] = src_1 & src_2;
         printf("AND x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x1:
-    {
         // SLL
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
-
         ih->registers[ih->rd] = src_1 << src_2;
         printf("SLL x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x5:
-    {
         // SRL
         if (ih->funct7 == 0)
         {
-            int src_1 = ih->registers[ih->rs1];
-            int src_2 = ih->registers[ih->rs2];
-
             ih->registers[ih->rd] = src_1 >> src_2;
             printf("SRL x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
@@ -241,34 +187,23 @@ void execute_format_r(struct InstructionHandler *ih)
         if (ih->funct7 == 0x20)
         {
             // TODO (NOT WORKING!!!)
-            int src_1 = ih->registers[ih->rs1];
-            int src_2 = ih->registers[ih->rs2];
-
             ih->registers[ih->rd] = src_1 >> src_2;
             printf("SRA x%d(%d), x%d(%d) -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         }
         break;
-    }
 
     case 0x2:
-    {
         // SLT
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
         ih->registers[ih->rd] = (src_1 < src_2 ? 1 : 0);
         printf("SLT x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x3:
-    {
         // SLTU TODO NOT WORKING!!
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->registers[ih->rs2];
         ih->registers[ih->rd] = (src_1 < src_2 ? 1 : 0);
         printf("SLTU x%d(%d), x%d(%d) -> x%d(%d) -- NOT IMPLEMENTED CORRECTLY\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
+
     default:
         printf("UNKOWN FUNC: %d\n", ih->funct3);
         break;
@@ -277,58 +212,45 @@ void execute_format_r(struct InstructionHandler *ih)
 
 void execute_format_i1(struct InstructionHandler *ih)
 {
+    int src = ih->registers[ih->rs1];
+    int src_2 = ih->imm;
+
     switch (ih->funct3)
     {
     case 0:
-    { // ADDI
-        int src = ih->registers[ih->rs1];
+        // ADDI
         ih->registers[ih->rd] = src + ih->imm;
         printf("ADDI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         break;
-    }
     case 0x4:
-    {
         // XORI
-        int src = ih->registers[ih->rs1];
         ih->registers[ih->rd] = src ^ ih->imm;
         printf("XORI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x6:
-    {
         // OR
-        int src = ih->registers[ih->rs1];
         ih->registers[ih->rd] = src | ih->imm;
         printf("ORI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x7:
-    {
         // ANDI
-        int src = ih->registers[ih->rs1];
         ih->registers[ih->rd] = src & ih->imm;
         printf("ANDI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x1:
-    {
         // SLLI
-        int src = ih->registers[ih->rs1];
         ih->registers[ih->rd] = src << (ih->imm & 0b11111);
         printf("SLLI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x5:
-    {
         // SRLI
         if (((ih->imm >> 5) & 0b11111111) == 0x00)
         {
             // SLLI
-            int src = ih->registers[ih->rs1];
             ih->registers[ih->rd] = src >> (ih->imm & 0b11111);
             printf("SRLI x%d(%d) + %d -> x%d(%d)\n", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
             break;
@@ -337,32 +259,23 @@ void execute_format_i1(struct InstructionHandler *ih)
         if (((ih->imm >> 5) & 0b11111111) == 0x20)
         {
             // TODO (NOT WORKING!!!)
-            int src = ih->registers[ih->rs1];
             ih->registers[ih->rd] = src >> (ih->imm & 0b11111);
             printf("SRAI x%d(%d) + %d -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src, ih->imm, ih->rd, ih->registers[ih->rd]);
         }
         break;
-    }
 
     case 0x2:
-    {
         // SLTI
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
-        ih->registers[ih->rd] = (src_1 < src_2 ? 1 : 0);
-        printf("SLTI x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
+        ih->registers[ih->rd] = (src < src_2 ? 1 : 0);
+        printf("SLTI x%d(%d), x%d(%d) -> x%d(%d)\n", ih->rs1, src, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x3:
-    {
         // SLTIU TODO NOT WORKING!!
-        int src_1 = ih->registers[ih->rs1];
-        int src_2 = ih->imm;
-        ih->registers[ih->rd] = (src_1 < src_2 ? 1 : 0);
-        printf("SLTU x%d(%d), x%d(%d) -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src_1, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
+        ih->registers[ih->rd] = (src < src_2 ? 1 : 0);
+        printf("SLTU x%d(%d), x%d(%d) -> x%d(%d)\n -- NOT IMPLEMENTED CORRECTLY", ih->rs1, src, ih->rs2, src_2, ih->rd, ih->registers[ih->rd]);
         break;
-    }
+
     default:
         printf("UNKOWN FUNC: %d\n", ih->funct3);
         break;
@@ -376,47 +289,40 @@ void execute_format_i2(struct InstructionHandler *ih)
     switch (ih->funct3)
     {
     case 0:
-    { // LB
+        // LB
         ih->registers[ih->rd] = (signed char)ih->load_memory(ih, addr, 1);
 
         printf("LB M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x1:
-    { // LH
+        // LH
         ih->registers[ih->rd] = (short)ih->load_memory(ih, addr, 2);
 
         printf("LH M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x2:
-    { // LW
+        // LW
         ih->registers[ih->rd] = ih->load_memory(ih, addr, 4);
 
         printf("LW M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     case 0x4:
-    {
         // LBU
         ih->registers[ih->rd] = ih->load_memory(ih, addr, 1);
 
         printf("LBU M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
 
         break;
-    }
 
     case 0x5:
-    {
         // LHU
         ih->registers[ih->rd] = ih->load_memory(ih, addr, 2);
 
         printf("LHU M[%u] -> x%d(%d)\n", addr, ih->rd, ih->registers[ih->rd]);
         break;
-    }
 
     default:
         printf("UNKOWN FUNC: %d\n", ih->funct3);
@@ -432,28 +338,25 @@ void execute_format_s(struct InstructionHandler *ih)
     switch (ih->funct3)
     {
     case 0x0:
-    { // SB
+        // SB
         ih->store_memory(ih, addr, 1, value);
 
         printf("SB x%d(%d) -> M[%u]\n", ih->rs2, value & 0xFF, addr);
         break;
-    }
 
     case 0x1:
-    { // SH
+        // SH
         ih->store_memory(ih, addr, 2, value);
 
         printf("SH x%d(%d) -> M[%u]\n", ih->rs2, value & 0xFFFF, addr);
         break;
-    }
 
     case 0x2:
-    { // SW
+        // SW
         ih->store_memory(ih, addr, 4, value);
 
         printf("SW x%d(%d) -> M[%u]\n", ih->rs2, value, addr);
         break;
-    }
 
     default:
         printf("UNKOWN FUNC: %d\n", ih->funct3);
@@ -563,10 +466,4 @@ void execute_format_u2(struct InstructionHandler *ih, struct ProgramCounter *pc)
     // AUIPC
     ih->registers[ih->rd] = pc->cnt + ih->imm;
     printf("AUIPC PC(%d) + %d -> x%d(%d)\n", pc->cnt, ih->imm, ih->rd, ih->registers[ih->rd]);
-}
-
-instruction_err_t execute_instruction(struct InstructionHandler *ih, instruction_t instruction)
-{
-
-    return 0;
 }

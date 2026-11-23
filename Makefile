@@ -24,6 +24,9 @@ build/%.o: src/%.c | build
 run: $(TARGET)
 	./$(TARGET) $(ARGS)
 
+test:
+	./script.sh
+
 bin build:
 	mkdir -p $@
 

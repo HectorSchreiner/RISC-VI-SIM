@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
   struct ProgramCounter *pc = create_counter();
   struct InstructionHandler *ih = create_instruction_handler();
 
-  int *instructions_b = fh->read_file(fh, argv[1],&instruction_cnt);
+  int *instructions_b = fh->read_file(fh, argv[1], &instruction_cnt);
   if (!instructions_b || !ih)
     return 1;
 
@@ -41,8 +41,9 @@ int main(int argc, char *argv[]) {
   }
 
   for(int i = 0; i < 32; i++){
-  printf("%d: %d\n",i, ih->registers[i]);
+    printf("%d: %d\n",i, ih->registers[i]);
   }
+
   int n = sizeof(ih->registers) / sizeof(ih->registers[0]);
   fh->write_file(argv[2], ih->registers, n);
 
