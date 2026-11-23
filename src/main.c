@@ -3,6 +3,19 @@
 #include "program_counter.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+
+static void dump_registers(struct InstructionHandler *ih) {
+  printf("\nRegisters:\n");
+  for (int i = 0; i < 32; i++) {
+    printf("x%02d = 0x%08x", i, ih->registers[i]);
+    if (ih->registers[i] != 0) {
+      printf("  <-- Non-zero\n");
+    } else {
+      printf("\n");
+    }
+  }
+}
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -40,9 +53,7 @@ int main(int argc, char *argv[]) {
       pc->increment_counter(pc);
   }
 
-  for(int i = 0; i < 32; i++){
-    printf("%d: %d\n",i, ih->registers[i]);
-  }
+  dump_registers(ih);
 
   int n = sizeof(ih->registers) / sizeof(ih->registers[0]);
   fh->write_file(argv[2], ih->registers, n);
